@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polyglot Studio (Monaco + Share + Snippets)</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://unpkg.com/monaco-editor@0.45.0/min/vs/editor/editor.main.css">
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.2.12/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sass.js/0.11.1/sass.sync.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+
+    <style>
+        :root {
+           --bg-dark-primary: #201f2c; --bg-dark-secondary: #2c2a3b; --bg-dark-tertiary: #353346;
+           --border-dark: #444257; --text-light-primary: #f0f2f5; --text-light-secondary: #a9a8b3;
+           --accent-purple: #7a5af5; --accent-purple-hover: #6643e0; --accent-red: #dc3545;
+           --accent-red-hover: #c82333; --accent-blue: #3498db; --accent-blue-hover: #2980b9;
+           --font-family: 'Poppins', Arial, Helvetica, sans-serif;
+           --font-family-mono: 'Roboto Mono', 'Courier New', Courier, monospace;
+           --cmd-bg: #1e1e1e; --cmd-text: #cccccc; --cmd-prompt: #00ff00;
+           --monaco-bg: #1e1e1e;
+        }
+        html, body { height: 100%; overflow: hidden; }
+        body { font-family: var(--font-family); background-color: var(--bg-dark-primary); color: var(--text-light-primary); display: flex; flex-direction: column; font-size: 14px; margin:0; }
+        ::-webkit-scrollbar { width: 9px; height: 9px; } ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 5px; } ::-webkit-scrollbar-thumb { background: #5a5a6a; border-radius: 5px; border: 2px solid var(--bg-dark-primary); } ::-webkit-scrollbar-thumb:hover { background: #707080; }
+        header.controls { background-color: var(--bg-dark-secondary); padding: 10px 20px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        header.controls h1 { font-size: 1.3em; font-weight: 500; color: var(--text-light-primary); }
+        header.controls .buttons {display: flex; align-items: center; flex-wrap: wrap; gap: 5px;}
+        header.controls .buttons button { padding: 7px 14px; margin-left: 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: 500; color: white; transition: all 0.2s ease-in-out; box-shadow: 0 1px 3px rgba(0,0,0,0.15); opacity: 0.9; }
+        header.controls .buttons button:first-child {margin-left: 0;}
+        header.controls .buttons button:hover { opacity: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transform: translateY(-1px); }
+        header.controls .buttons button#cmd-toggle-button { background-color: #4caf50; display: flex; align-items: center; gap: 6px; padding: 7px 10px; } header.controls .buttons button#cmd-toggle-button:hover { background-color: #45a049; } header.controls .buttons button#cmd-toggle-button svg { vertical-align: middle; }
+        header.controls .buttons button#share-button { background-color: var(--accent-blue); } header.controls .buttons button#share-button:hover { background-color: var(--accent-blue-hover); }
+        header.controls .buttons button#manage-snippets-button { background-color: var(--accent-blue); } header.controls .buttons button#manage-snippets-button:hover { background-color: var(--accent-blue-hover); }
+        header.controls .buttons button#download-button { background-color: var(--accent-purple); } header.controls .buttons button#download-button:hover { background-color: var(--accent-purple-hover); }
+        header.controls .buttons button#clear-button { background-color: var(--accent-red); } header.controls .buttons button#clear-button:hover { background-color: var(--accent-red-hover); }
+        .main-content { display: flex; flex-grow: 1; overflow: hidden; padding: 8px; gap: 8px; position: relative; }
+        .editors-container { width: 50%; background-color: var(--bg-dark-secondary); border-radius: 7px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+        .editor-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; } .editor-pane:not(:last-child) { border-bottom: 1px solid var(--border-dark); }
+        .editor-pane-header { display: flex; justify-content: space-between; align-items: center; padding: 0px 12px; background-color: var(--bg-dark-tertiary); border-bottom: 1px solid var(--border-dark); flex-shrink: 0; height: 40px; }
+        .editor-pane-header h2 { font-size: 0.9em; font-weight: 500; color: var(--text-light-secondary); }
+        .editor-pane-header select { background-color: var(--bg-dark-secondary); color: var(--text-light-primary); border: 1px solid var(--border-dark); border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-family: var(--font-family); }
+        .monaco-editor-host { flex-grow: 1; min-height: 0; background-color: var(--monaco-bg); }
+        .preview-and-console-wrapper { width: 50%; display: flex; flex-direction: column; gap: 8px; }
+        .preview-container, .console-output-container { background-color: var(--bg-dark-secondary); border-radius: 7px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+        .preview-container { flex-grow: 1; }
+        .preview-container > h2, .console-output-container > h2 { font-size: 0.9em; padding: 0 12px; background-color: var(--bg-dark-tertiary); border-bottom: 1px solid var(--border-dark); font-weight: 500; color: var(--text-light-secondary); flex-shrink: 0; height: 40px; line-height: 40px;}
+        #preview-frame { flex-grow: 1; width: 100%; border: none; background-color: #fff; border-radius: 0 0 6px 6px; }
+        .console-output-container { min-height: 80px; flex-shrink: 0; }
+        #console-output-py { flex-grow: 1; padding: 8px; font-family: var(--font-family-mono); font-size: 0.85em; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto; background-color: var(--bg-dark-primary); color: var(--text-light-primary); border-radius: 0 0 6px 6px;}
+        #loading-indicator { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(0,0,0,0.8); color: white; padding: 15px 25px; border-radius: 7px; font-size: 1em; z-index: 10000; display: none; text-align: center; }
+        #loading-indicator span { display: block; margin-top: 8px; font-size: 0.75em; opacity: 0.8; }
+        footer { background-color: var(--bg-dark-secondary); padding: 8px 15px; text-align: center; font-size: 0.8em; color: var(--text-light-secondary); border-top: 1px solid var(--border-dark); flex-shrink: 0; }
+        #command-prompt-panel { position: absolute; bottom: 0; left: 0; right: 0; height: 35%; background-color: var(--cmd-bg); border-top: 2px solid var(--accent-purple); box-shadow: 0 -5px 15px rgba(0,0,0,0.3); display: none; flex-direction: column; padding: 10px; z-index: 9990; color: var(--cmd-text); font-family: var(--font-family-mono); }
+        #command-output { flex-grow: 1; overflow-y: auto; white-space: pre-wrap; font-size: 0.9em; margin-bottom: 10px; }
+        #command-output .cmd-line { margin-bottom: 2px; } #command-output .cmd-line.cmd-error { color: #ff6b6b; } #command-output .cmd-line.cmd-success { color: #50fa7b; } #command-output .cmd-line.cmd-info { color: #8be9fd; } #command-output .cmd-line.cmd-warn { color: #f1fa8c; }
+        .command-input-line { display: flex; align-items: center; } .command-input-line .prompt-char { color: var(--cmd-prompt); margin-right: 5px; font-weight: bold;}
+        #command-input { flex-grow: 1; background-color: transparent; border: none; color: var(--cmd-text); font-family: var(--font-family-mono); font-size: 0.9em; outline: none; }
+
+        .toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 5px; padding: 16px; position: fixed; z-index: 10001; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 0.9em; box-shadow: 0 0 10px rgba(0,0,0,0.5); opacity: 0; transition: visibility 0s 0.5s, opacity 0.5s linear; }
+        .toast.show { visibility: visible; opacity: 1; transition: opacity 0.5s linear; }
+
+        /* --- Modal Base Styles (Dark Theme) --- */
+        .modal { display: none; position: fixed; z-index: 10002; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); color: var(--text-light-primary); }
+        .modal-content { background-color: var(--bg-dark-secondary); margin: 5% auto; padding: 25px; border: 1px solid var(--border-dark); border-radius: 8px; width: 80%; max-width: 700px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .close-button { color: var(--text-light-secondary); float: right; font-size: 28px; font-weight: bold; line-height: 1; }
+        .close-button:hover, .close-button:focus { color: var(--text-light-primary); text-decoration: none; cursor: pointer; }
+        .modal-content h2, .modal-content h3 { color: var(--text-light-primary); border-bottom: 1px solid var(--border-dark); padding-bottom: 8px; margin-top: 0; }
+        .modal-content h3 { margin-top: 20px; font-size: 1.1em; }
+
+        /* --- Snippet Manager Specific Styles --- */
+        .snippet-actions-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .action-button { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.9em; font-weight: 500; color: white; background-color: var(--accent-purple); transition: background-color 0.2s ease; }
+        .action-button:hover { background-color: var(--accent-purple-hover); }
+        .action-button.primary { background-color: var(--accent-blue); }
+        .action-button.primary:hover { background-color: var(--accent-blue-hover); }
+        .file-input-label { display: inline-block; text-align: center; }
+        #snippet-editor-form-container { background-color: var(--bg-dark-tertiary); padding: 20px; border-radius: 6px; border: 1px solid var(--border-dark); }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: var(--text-light-secondary); }
+        .form-group input[type="text"], .form-group select, .form-group textarea { width: 100%; padding: 10px; background-color: var(--bg-dark-primary); color: var(--text-light-primary); border: 1px solid var(--border-dark); border-radius: 4px; font-size: 0.9em; box-sizing: border-box; }
+        .form-group textarea { resize: vertical; min-height: 100px; font-family: var(--font-family-mono); }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 2px rgba(122, 90, 245, 0.3); }
+        .form-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        #user-snippets-list .snippet-item { background-color: var(--bg-dark-tertiary); padding: 10px 15px; margin-bottom: 10px; border-radius: 5px; border: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center; }
+        #user-snippets-list .snippet-info .trigger { font-weight: bold; color: var(--accent-purple); font-family: var(--font-family-mono); }
+        #user-snippets-list .snippet-info .language { font-size: 0.8em; color: var(--text-light-secondary); background-color: var(--bg-dark-primary); padding: 2px 6px; border-radius: 3px; margin-left: 8px; }
+        #user-snippets-list .snippet-item-actions button { margin-left: 8px; background: none; border: 1px solid var(--border-dark); color: var(--text-light-secondary); padding: 5px 8px; font-size: 0.8em; border-radius: 4px; cursor: pointer; }
+        #user-snippets-list .snippet-item-actions button:hover { background-color: var(--bg-dark-primary); color: var(--text-light-primary); }
+        #user-snippets-list .snippet-item-actions .delete-btn { border-color: var(--accent-red); color: var(--accent-red); }
+        #user-snippets-list .snippet-item-actions .delete-btn:hover { background-color: var(--accent-red); color: white; }
+
+
+        @media (max-width: 992px) { .main-content { flex-direction: column; } .editors-container, .preview-and-console-wrapper { width: 100%; } .editors-container { min-height: 300px; height: 48vh; margin-bottom: 8px; } .preview-and-console-wrapper { min-height: 250px; height: 42vh; } #command-prompt-panel { height: 40%; } }
+        @media (max-width: 768px) { header.controls {flex-direction: column; gap: 10px; padding: 12px;} header.controls h1 {text-align: center;} header.controls .buttons {width: 100%; justify-content: space-around;} header.controls .buttons button {margin-left: 5px; margin-right: 5px; flex-grow: 1; max-width: 160px;} header.controls .buttons button:first-child {margin-left: 5px;} }
+         @media (max-width: 1100px) { header.controls .buttons { gap: 5px; } header.controls .buttons button { padding: 7px 10px; margin-left: 5px;} }
+    </style>
+</head>
+<body>
+    <div id="loading-indicator">Initializing...<span id="loading-details">Please wait</span></div>
+    <header class="controls">
+        <h1>Polyglot Studio <sub>Snippets</sub></h1>
+        <div class="buttons">
+            <button id="cmd-toggle-button" title="Toggle Command Prompt"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm9.5 5.5h-3a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1zm-6.354-.354a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146z"/></svg><span class="cmd-button-text">CMD</span></button>
+            <button id="share-button" title="Share Code">Share</button>
+            <button id="manage-snippets-button" title="Manage Snippets">Snippets</button>
+            <button id="clear-button" title="Clear all code editors">Clear All</button>
+            <button id="download-button" title="Download current code/project">Download Code</button>
+        </div>
+    </header>
+    <div class="main-content">
+        <div class="editors-container">
+            <div class="editor-pane"><div class="editor-pane-header"><h2>Structure</h2><select id="html-language-select"><option value="html" selected>HTML</option><option value="markdown">Markdown</option></select></div><div id="html-editor-container" class="monaco-editor-host"></div></div>
+            <div class="editor-pane"><div class="editor-pane-header"><h2>Style</h2><select id="css-language-select"><option value="css" selected>CSS</option><option value="scss">SCSS</option></select></div><div id="css-editor-container" class="monaco-editor-host"></div></div>
+            <div class="editor-pane"><div class="editor-pane-header"><h2>Logic</h2><select id="script-language-select"><option value="javascript" selected>JavaScript</option><option value="typescript">TypeScript</option><option value="jsx">React (JSX)</option><option value="python">Python</option></select></div><div id="script-editor-container" class="monaco-editor-host"></div></div>
+        </div>
+        <div class="preview-and-console-wrapper">
+            <div class="preview-container" id="iframe-container"><h2>Web Preview</h2><iframe id="preview-frame"></iframe></div>
+            <div class="console-output-container" id="output-console-container" style="display:none;"><h2>Console Output</h2><pre id="console-output-py"></pre></div>
+        </div>
+        <div id="command-prompt-panel">
+            <div id="command-output"><div class="cmd-line cmd-info">Polyglot Studio CMD [v1.7.0 Snippets]</div><div class="cmd-line cmd-info">(c) 2024 Girish Lade. Type 'help'.</div><div class="cmd-line"></div></div>
+            <div class="command-input-line"><span class="prompt-char">PS ></span><input type="text" id="command-input" autofocus spellcheck="false"></div>
+        </div>
+    </div>
+    <footer>Copyright 2024, by Girish Lade</footer>
+    <div id="toast-notification" class="toast">Link copied to clipboard!</div>
+
+    <div id="snippet-manager-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-snippet-modal">&times;</span>
+            <h2>Snippet Manager</h2>
+            <div class="snippet-actions-bar">
+                <button id="create-new-snippet-button" class="action-button">Create New Snippet</button>
+                <button id="export-snippets-button" class="action-button">Export All</button>
+                <label for="import-snippets-input" class="action-button file-input-label"> Import Snippets <input type="file" id="import-snippets-input" accept=".json" style="display: none;"></label>
+            </div>
+            <div id="snippet-editor-form-container" style="display:none; margin-top: 20px;">
+                <h3><span id="snippet-form-title">Create New</span> Snippet</h3>
+                <form id="snippet-form">
+                    <input type="hidden" id="snippet-id-input">
+                    <div class="form-group"> <label for="snippet-language-input">Language:</label> <select id="snippet-language-input" required> <option value="html">HTML</option> <option value="markdown">Markdown</option> <option value="css">CSS</option> <option value="scss">SCSS</option> <option value="javascript">JavaScript</option> <option value="typescript">TypeScript</option> <option value="jsx">React (JSX)</option> <option value="python">Python</option> </select> </div>
+                    <div class="form-group"> <label for="snippet-trigger-input">Trigger Keyword:</label> <input type="text" id="snippet-trigger-input" placeholder="e.g., log, divflex (no spaces)" required pattern="^\S+$"> </div>
+                    <div class="form-group"> <label for="snippet-template-input">Snippet Code (use $CURSOR$ for cursor position):</label> <textarea id="snippet-template-input" rows="8" placeholder="Enter your code snippet here..." required></textarea> </div>
+                    <div class="form-group form-buttons"> <button type="submit" id="save-snippet-button" class="action-button primary">Save Snippet</button> <button type="button" id="cancel-snippet-edit-button" class="action-button">Cancel</button> </div>
+                </form>
+            </div>
+            <div id="snippet-list-container" style="margin-top: 20px;"> <h3>My Snippets</h3> <div id="user-snippets-list"> <p>No custom snippets yet. Click "Create New Snippet" to add one.</p> </div> </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/monaco-editor@0.45.0/min/vs/loader.js"></script>
+
+    <script>
+        // --- Globals, Helpers, DOM Elements ---
+        let pyodide = null; let sassInstance = null; let tsService = null;
+        let htmlMonaco, cssMonaco, scriptMonaco;
+        let htmlLangSelect, cssLangSelect, scriptLangSelect;
+
+        const cmdPanel = document.getElementById('command-prompt-panel'); /* ... other globals ... */
+        const cmdOutput = document.getElementById('command-output');
+        const cmdInput = document.getElementById('command-input');
+        const cmdToggleButton = document.getElementById('cmd-toggle-button');
+        const consoleOutputPyElement = document.getElementById('console-output-py');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingDetails = document.getElementById('loading-details');
+        const previewFrame = document.getElementById('preview-frame');
+        const iframeContainer = document.getElementById('iframe-container');
+        const outputConsoleContainer = document.getElementById('output-console-container');
+        const toastNotification = document.getElementById('toast-notification');
+        const shareButton = document.getElementById('share-button');
+        const GITHUB_API_URL = 'https://api.github.com/gists';
+
+        // --- Built-in Code Presets Definition ---
+        const codePresets = { html: { '!': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    $CURSOR$\n</body>\n</html>`, 'table': `<table>\n    <thead>\n        <tr>\n            <th>Header 1</th>\n            <th>Header 2</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>$CURSOR$Data 1</td>\n            <td>Data 2</td>\n        </tr>\n    </tbody>\n</table>`, 'link:css': '<link rel="stylesheet" href="style.css">', 'script:src': '<script src="app.js" defer>$CURSOR$<\/script>' }, css: { 'bg': 'background-color: $CURSOR#', 'btn': `.button {\n    display: inline-block;\n    padding: 10px 20px;\n    font-size: 16px;\n    cursor: pointer;\n    text-align: center;\n    color: #fff;\n    background-color: #4CAF50;\n    border: none;\n    border-radius: 15px;\n}\n.button:hover {background-color: #3e8e41}$CURSOR$`, 'flex': `display: flex;\nalign-items: center;\njustify-content: center;$CURSOR$` }, javascript: { 'log': 'console.log($CURSOR$);', 'fun': `function functionName($CURSOR$) {\n    // code block\n}`, 'for': `for (let i = 0; i < array.length; i++) {\n    const element = array[i];\n    $CURSOR$\n}`, 'fetch': `fetch('https://api.example.com/data')\n    .then(response => response.json())\n    .then(data => {\n        console.log(data);\n        $CURSOR$\n    })\n    .catch(error => console.error('Error fetching data:', error));` }, typescript: { 'interface': `interface NewInterface {\n    property: string;\n    $CURSOR$\n}`, 'type': `type NewType = {\n    id: number;\n    name: string;\n    $CURSOR$\n};`, 'comp': `import React from 'react';\n\nconst NewComponent = (props) => {\n    return (\n        <div>\n            $CURSOR$\n        </div>\n    );\n};\n\nexport default NewComponent;`, 'useState': `const [value, setValue] = React.useState($CURSOR$initialValue);` }, jsx: { 'comp': `import React from 'react';\n\nconst NewComponent = (props) => {\n    return (\n        <div>\n            $CURSOR$\n        </div>\n    );\n};\n\nexport default NewComponent;`, 'useState': `const [value, setValue] = React.useState($CURSOR$initialValue);` }, python: { 'def': `def new_function(arg1, arg2):\n    # function body\n    $CURSOR$\n    pass`, 'class': `class NewClass:\n    def __init__(self$CURSOR$):\n        pass\n\n    def method(self):\n        pass`, 'for': `for item in iterable:\n    # process item\n    $CURSOR$\n    pass` } };
+        const defaultCodes = { html: `<h1>Hello, Monaco!</h1>\n<p>Start typing HTML or select Markdown.</p>`, markdown: `# Start Typing Markdown!`, css: `body {\n    font-family: sans-serif;\n    padding: 10px;\n    background-color: #f0f0f0;\n}`, scss: `// SCSS here\n$primary-color: #7a5af5;\nbody { h1 { color: $primary-color; } }`, javascript: `// JavaScript here\nconsole.log('Hello from Monaco JavaScript!');`, typescript: `// TypeScript here\nconst message: string = "Hello from Monaco TypeScript!";\nconsole.log(message);`, jsx: `// React (JSX) here\nconst App = () => (\n    <div>\n        <h1>Hello from React (JSX) in Monaco!</h1>\n    </div>\n);\n`, python: `# Python here\nprint("Hello from Python in Monaco via Pyodide!")`};
+
+        function triggerDownload(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href); }
+        function appendCmdOutput(text, type = 'normal') { const line = document.createElement('div'); line.classList.add('cmd-line'); if (type === 'error') line.classList.add('cmd-error'); else if (type === 'success') line.classList.add('cmd-success'); else if (type === 'info') line.classList.add('cmd-info'); else if (type === 'warn') line.classList.add('cmd-warn'); line.textContent = text; cmdOutput.appendChild(line); cmdOutput.scrollTop = cmdOutput.scrollHeight; }
+        function debounce(func, wait) { let timeout; return (...args) => { const later = () => { clearTimeout(timeout); func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; }
+        function getMonacoLangId(langKey) { switch(langKey) { case 'html': return 'html'; case 'markdown': return 'markdown'; case 'css': return 'css'; case 'scss': return 'scss'; case 'javascript': return 'javascript'; case 'typescript': return 'typescript'; case 'jsx': return 'typescript'; case 'python': return 'python'; default: return 'plaintext'; } }
+        function showToast(message = "Link copied to clipboard!", duration = 3000) { toastNotification.textContent = message; toastNotification.classList.add('show'); setTimeout(() => { toastNotification.classList.remove('show'); }, duration); }
+
+        const SNIPPET_STORAGE_KEY = 'polyglotUserSnippets_v1';
+        const SnippetManager = {
+            snippets: [],
+            loadSnippets: function() { try { const storedSnippets = localStorage.getItem(SNIPPET_STORAGE_KEY); this.snippets = storedSnippets ? JSON.parse(storedSnippets) : []; } catch (e) { console.error("Error loading snippets:", e); this.snippets = []; } this.snippets.forEach(s => { if (typeof s.isEnabled === 'undefined') s.isEnabled = true; }); return this.snippets; },
+            saveSnippets: function() { try { localStorage.setItem(SNIPPET_STORAGE_KEY, JSON.stringify(this.snippets)); } catch (e) { console.error("Error saving snippets:", e); appendCmdOutput("Error saving snippets. Storage might be full.", "error"); } },
+            generateId: function() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); },
+            addSnippet: function(snippetData) { if (!snippetData.trigger || !snippetData.template || !snippetData.language) { appendCmdOutput("Snippet data incomplete.", "error"); return false; } if (this.isTriggerTaken(snippetData.trigger, snippetData.language)) { appendCmdOutput(`Trigger '${snippetData.trigger}' already exists for ${snippetData.language}.`, "error"); showToast(`Trigger '${snippetData.trigger}' already exists.`, 4000); return false; } const newSnippet = { id: this.generateId(), trigger: snippetData.trigger.trim(), template: snippetData.template, language: snippetData.language, isUserDefined: true, isEnabled: true, createdAt: new Date().toISOString() }; this.snippets.push(newSnippet); this.saveSnippets(); appendCmdOutput(`Snippet '${newSnippet.trigger}' for ${newSnippet.language} added.`, "success"); return true; },
+            updateSnippet: function(snippetId, updatedData) { const index = this.snippets.findIndex(s => s.id === snippetId); if (index === -1) { appendCmdOutput("Snippet not found for update.", "error"); return false; } if (updatedData.trigger && this.isTriggerTaken(updatedData.trigger, updatedData.language || this.snippets[index].language, snippetId)) { appendCmdOutput(`Trigger '${updatedData.trigger}' already exists.`, "error"); showToast(`Trigger '${updatedData.trigger}' already exists.`, 4000); return false; } this.snippets[index] = { ...this.snippets[index], ...updatedData, trigger: updatedData.trigger.trim() }; this.saveSnippets(); appendCmdOutput(`Snippet '${this.snippets[index].trigger}' updated.`, "success"); return true; },
+            deleteSnippet: function(snippetId) { const initialLength = this.snippets.length; this.snippets = this.snippets.filter(s => s.id !== snippetId); if (this.snippets.length < initialLength) { this.saveSnippets(); appendCmdOutput("Snippet deleted.", "success"); return true; } appendCmdOutput("Snippet not found.", "error"); return false; },
+            toggleSnippetEnabled: function(snippetId) { const index = this.snippets.findIndex(s => s.id === snippetId); if (index > -1) { this.snippets[index].isEnabled = !this.snippets[index].isEnabled; this.saveSnippets(); renderUserSnippetsList(); appendCmdOutput(`Snippet '${this.snippets[index].trigger}' ${this.snippets[index].isEnabled ? 'enabled' : 'disabled'}.`, "info"); } },
+            getSnippetsByLanguage: function(language) { return this.snippets.filter(s => s.language === language && s.isUserDefined && s.isEnabled); },
+            getAllUserSnippets: function() { return [...this.snippets.filter(s => s.isUserDefined)]; },
+            isTriggerTaken: function(trigger, language, excludeId = null) { return this.snippets.some(s => s.language === language && s.trigger.toLowerCase() === trigger.toLowerCase() && s.id !== excludeId); },
+            exportSnippets: function() { const userSnippets = this.getAllUserSnippets().map(({id, createdAt, isUserDefined, ...rest}) => rest); if (userSnippets.length === 0) { showToast("No user snippets to export.", 3000); return; } const jsonString = JSON.stringify(userSnippets, null, 2); const blob = new Blob([jsonString], { type: 'application/json' }); triggerDownload(blob, 'polyglot-studio-snippets.json'); appendCmdOutput("User snippets exported.", "success"); },
+            importSnippets: function(file) { const reader = new FileReader(); reader.onload = (event) => { try { const imported = JSON.parse(event.target.result); if (!Array.isArray(imported)) throw new Error("Invalid snippet array."); let importedCount = 0, skippedCount = 0; imported.forEach(s => { if (s.trigger && s.template && s.language) { if (!this.isTriggerTaken(s.trigger, s.language)) { this.addSnippet({ trigger: s.trigger, template: s.template, language: s.language }); importedCount++; } else { skippedCount++; appendCmdOutput(`Skipped importing '${s.trigger}' for ${s.language} (trigger taken).`, "warn"); } } else { appendCmdOutput("Skipped invalid snippet object.", "warn"); } }); renderUserSnippetsList(); showToast(`${importedCount} snippets imported. ${skippedCount} skipped.`, 4000); appendCmdOutput(`${importedCount} imported. ${skippedCount} skipped.`, "info"); } catch (e) { console.error("Error importing snippets:", e); appendCmdOutput(`Import error: ${e.message}`, "error"); showToast("Failed to import. Invalid JSON.", 4000); } }; reader.onerror = () => { appendCmdOutput("Error reading import file.", "error"); showToast("Error reading file.", 3000); }; reader.readAsText(file); }
+        };
+        SnippetManager.loadSnippets();
+
+        const snippetModal = document.getElementById('snippet-manager-modal');
+        const manageSnippetsButton = document.getElementById('manage-snippets-button');
+        const closeSnippetModalButton = document.getElementById('close-snippet-modal');
+        const createNewSnippetButton = document.getElementById('create-new-snippet-button');
+        const snippetEditorFormContainer = document.getElementById('snippet-editor-form-container');
+        const snippetForm = document.getElementById('snippet-form');
+        const snippetFormTitle = document.getElementById('snippet-form-title');
+        const snippetIdInput = document.getElementById('snippet-id-input');
+        const snippetLanguageInput = document.getElementById('snippet-language-input');
+        const snippetTriggerInput = document.getElementById('snippet-trigger-input');
+        const snippetTemplateInput = document.getElementById('snippet-template-input');
+        const saveSnippetButton = document.getElementById('save-snippet-button');
+        const cancelSnippetEditButton = document.getElementById('cancel-snippet-edit-button');
+        const userSnippetsListDiv = document.getElementById('user-snippets-list');
+        const exportSnippetsButton = document.getElementById('export-snippets-button');
+        const importSnippetsInput = document.getElementById('import-snippets-input');
+
+        function openSnippetModal() { SnippetManager.loadSnippets(); renderUserSnippetsList(); snippetEditorFormContainer.style.display = 'none'; snippetModal.style.display = 'block'; }
+        function closeSnippetModal() { snippetModal.style.display = 'none'; snippetForm.reset(); snippetIdInput.value = ''; }
+        function showSnippetForm(snippet = null) { snippetForm.reset(); snippetIdInput.value = ''; if (snippet) { snippetFormTitle.textContent = 'Edit'; snippetIdInput.value = snippet.id; snippetLanguageInput.value = snippet.language; snippetTriggerInput.value = snippet.trigger; snippetTemplateInput.value = snippet.template; } else { snippetFormTitle.textContent = 'Create New'; const activeScriptLang = typeof scriptLangSelect !== 'undefined' && scriptLangSelect ? scriptLangSelect.value : 'javascript'; snippetLanguageInput.value = activeScriptLang; } snippetEditorFormContainer.style.display = 'block'; }
+        function renderUserSnippetsList() { const snippets = SnippetManager.getAllUserSnippets(); userSnippetsListDiv.innerHTML = ''; if (snippets.length === 0) { userSnippetsListDiv.innerHTML = '<p>No custom snippets. Click "Create New" to add one.</p>'; return; } const groupedByLanguage = snippets.reduce((acc, snippet) => { (acc[snippet.language] = acc[snippet.language] || []).push(snippet); return acc; }, {}); Object.keys(groupedByLanguage).sort().forEach(lang => { const langHeader = document.createElement('h4'); langHeader.textContent = lang.charAt(0).toUpperCase() + lang.slice(1); langHeader.style.cssText = 'margin-top:15px;border-bottom:1px solid var(--border-dark);padding-bottom:5px;'; userSnippetsListDiv.appendChild(langHeader); groupedByLanguage[lang].forEach(s => { const item = document.createElement('div'); item.className = 'snippet-item'; item.innerHTML = `<div class="snippet-info"><span class="trigger">${s.trigger}</span><span class="language">${s.language}</span>${s.isEnabled ? '' : '<span class="language" style="background-color:var(--accent-red);color:white;">Disabled</span>'}</div><div class="snippet-item-actions"><button class="edit-btn" data-id="${s.id}">Edit</button><button class="toggle-btn" data-id="${s.id}">${s.isEnabled ? 'Disable' : 'Enable'}</button><button class="delete-btn" data-id="${s.id}">Delete</button></div>`; userSnippetsListDiv.appendChild(item); }); }); userSnippetsListDiv.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', (e) => { const snippetToEdit = SnippetManager.getAllUserSnippets().find(s => s.id === e.target.dataset.id); if (snippetToEdit) showSnippetForm(snippetToEdit); })); userSnippetsListDiv.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', (e) => { if (confirm('Delete snippet?')) { SnippetManager.deleteSnippet(e.target.dataset.id); renderUserSnippetsList(); } })); userSnippetsListDiv.querySelectorAll('.toggle-btn').forEach(btn => btn.addEventListener('click', (e) => SnippetManager.toggleSnippetEnabled(e.target.dataset.id))); }
+
+        async function serializeState() { if (!htmlMonaco || !cssMonaco || !scriptMonaco) { console.error("Editors not initialized."); return null; } return { hL: htmlLangSelect.value, hC: htmlMonaco.getValue(), cL: cssLangSelect.value, cC: cssMonaco.getValue(), sL: scriptLangSelect.value, sC: scriptMonaco.getValue(), v: 2 }; }
+        async function handleShareButtonClick() { loadingIndicator.style.display = 'flex'; loadingDetails.textContent = "Generating link..."; const state = await serializeState(); if (!state) { showToast("Error: Editors not ready.", 3000); loadingIndicator.style.display = 'none'; return; } const jsonState = JSON.stringify(state); let shareUrl = ''; try { const compressedState = LZString.compressToEncodedURIComponent(jsonState); const potentialUrl = `${window.location.origin}${window.location.pathname}#${compressedState}`; if (potentialUrl.length < 2000) { shareUrl = potentialUrl; } else { appendCmdOutput("Compressed code too long, trying Gist...", "info"); shareUrl = await createGistForState(jsonState); } } catch (e) { appendCmdOutput(`Error compressing state: ${e}`, "error"); showToast("Error generating link.", 3000); loadingIndicator.style.display = 'none'; return; } if (!shareUrl) { appendCmdOutput("Failed to create Gist.", "error"); showToast("Error creating Gist.", 4000); loadingIndicator.style.display = 'none'; return; } try { await navigator.clipboard.writeText(shareUrl); showToast("Link copied!"); appendCmdOutput(`Share link: ${shareUrl}`, "success"); } catch (err) { appendCmdOutput(`Failed to copy: ${err}`, "error"); showToast("Failed to copy. See console.", 3000); window.prompt("Copy this link:", shareUrl); } loadingIndicator.style.display = 'none'; }
+        async function createGistForState(jsonState) { try { const payload = { description: "Polyglot Studio Shared Code", public: true, files: { 'polyglot-studio-data.json': { content: jsonState } } }; const headers = { 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' }; const response = await fetch(GITHUB_API_URL, { method: 'POST', headers: headers, body: JSON.stringify(payload) }); if (!response.ok) { const errorData = await response.json(); throw new Error(`GitHub API Error: ${response.status} - ${errorData.message || 'Failed to create Gist'}`); } const gistData = await response.json(); if (gistData.id) { return `${window.location.origin}${window.location.pathname}?gist=${gistData.id}`; } throw new Error("Gist ID not found."); } catch (error) { appendCmdOutput(`Gist error: ${error.message}`, "error"); console.error("Gist error:", error); return null; } }
+        async function loadState(state) { if (!state || typeof state !== 'object') { console.error("Invalid state."); return; } if (!htmlMonaco || !cssMonaco || !scriptMonaco) { appendCmdOutput("Editors not ready, retrying load...", "warn"); setTimeout(() => loadState(state), 500); return; } loadingIndicator.style.display = 'flex'; loadingDetails.textContent = "Loading shared code..."; try { htmlLangSelect.value = state.hL || 'html'; cssLangSelect.value = state.cL || 'css'; scriptLangSelect.value = state.sL || 'javascript'; setEditorLanguage(htmlMonaco, htmlLangSelect.value); htmlMonaco.setValue(state.hC || ''); setEditorLanguage(cssMonaco, cssLangSelect.value); cssMonaco.setValue(state.cC || ''); setEditorLanguage(scriptMonaco, scriptLangSelect.value, true); scriptMonaco.setValue(state.sC || ''); appendCmdOutput("Shared code loaded!", "success"); await updatePreview(); } catch (e) { appendCmdOutput(`Error applying state: ${e}`, "error"); console.error("Error applying state:", e); } finally { loadingIndicator.style.display = 'none'; } }
+        async function loadSharedCodeFromURL() { const urlParams = new URLSearchParams(window.location.search); const gistId = urlParams.get('gist'); let loaded = false; if (gistId) { appendCmdOutput(`Loading Gist: ${gistId}`, "info"); loadingIndicator.style.display = 'flex'; loadingDetails.textContent = "Fetching Gist..."; try { const response = await fetch(`${GITHUB_API_URL}/${gistId}`); if (!response.ok) throw new Error(`Fetch Gist error: ${response.status}`); const gistData = await response.json(); const fileKey = Object.keys(gistData.files).find(key => key.includes('polyglot-studio-data.json')); if (fileKey && gistData.files[fileKey]?.content) { const state = JSON.parse(gistData.files[fileKey].content); await loadState(state); history.replaceState(null, '', window.location.pathname + window.location.hash); loaded = true; } else throw new Error("Gist content not found."); } catch (error) { appendCmdOutput(`Gist load error: ${error.message}`, "error"); console.error("Gist load error:", error); showToast("Failed to load from Gist.", 4000); } finally { loadingIndicator.style.display = 'none'; } } else if (window.location.hash && window.location.hash.length > 1) { appendCmdOutput("Loading from URL hash...", "info"); const compressedState = window.location.hash.substring(1); try { const jsonState = LZString.decompressFromEncodedURIComponent(compressedState); if (!jsonState) throw new Error("Decompression failed."); const state = JSON.parse(jsonState); await loadState(state); history.replaceState(null, '', window.location.pathname + window.location.search); loaded = true; } catch (error) { appendCmdOutput(`Hash load error: ${error.message}`, "error"); console.error("Hash load error:", error); showToast("Failed to load from link.", 4000); } } return loaded; }
+
+        let pyodideReadyPromise = loadPyodide().then(async (p) => { pyodide = p; appendCmdOutput("Pyodide v" + pyodide.version + " loaded.", "info"); try { await pyodide.loadPackage('micropip'); appendCmdOutput("Micropip loaded.", "success"); } catch (e) { appendCmdOutput(`Micropip error: ${e.message}`, "error"); } pyodide.runPython(`import sys,js\ndef custom_input_for_pyodide(p=""): return js.window.prompt(p)\n__builtins__.input = custom_input_for_pyodide`); return pyodide; }).catch(err => { appendCmdOutput(`Pyodide FATAL: ${err.message}`, "error"); pyodide = null; return Promise.reject(err); });
+
+        require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.45.0/min/vs' }});
+        window.MonacoEnvironment = { getWorkerUrl: () => proxy };
+        let proxy = URL.createObjectURL(new Blob([`self.MonacoEnvironment = { baseUrl: 'https://unpkg.com/monaco-editor@0.45.0/min/' }; importScripts('https://unpkg.com/monaco-editor@0.45.0/min/vs/base/worker/workerMain.js');`], { type: 'text/javascript' }));
+
+        require(['vs/editor/editor.main'], async function () {
+            monaco.languages.typescript.typescriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs, module: monaco.languages.typescript.ModuleKind.ESNext, jsx: monaco.languages.typescript.JsxEmit.React, reactNamespace: "React", allowJs: true, });
+            monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, jsx: monaco.languages.typescript.JsxEmit.React, reactNamespace: "React", allowJs: true, });
+
+            loadingIndicator.style.display = 'flex'; loadingDetails.textContent = "Libs & Pyodide...";
+            try { await pyodideReadyPromise; loadingDetails.textContent = "SCSS & TS..."; if (typeof Sass !== 'undefined') { sassInstance = Sass; } else { appendCmdOutput("Sass.js not found.", "error");} if (typeof ts !== 'undefined') { tsService = ts; } else { appendCmdOutput("TS lib not found.", "warn");} } catch (e) { appendCmdOutput(`Init Error: ${e.message}`, "error"); }
+
+            const monacoEditorOptions = { theme: 'vs-dark', lineNumbers: 'on', automaticLayout: true, fontSize: 13, fontFamily: "'Roboto Mono', monospace", wordWrap: 'on', minimap: { enabled: false }, scrollbar: { verticalScrollbarSize: 9, horizontalScrollbarSize: 9, }, glyphMargin: true, tabSize: 2, insertSpaces: true };
+            htmlLangSelect = document.getElementById('html-language-select'); cssLangSelect = document.getElementById('css-language-select'); scriptLangSelect = document.getElementById('script-language-select');
+            htmlMonaco = initializeMonacoEditor('html-editor-container', { ...monacoEditorOptions, language: 'html' }, codePresets.html, false);
+            cssMonaco = initializeMonacoEditor('css-editor-container', { ...monacoEditorOptions, language: 'css' }, codePresets.css, false);
+            scriptMonaco = initializeMonacoEditor('script-editor-container', { ...monacoEditorOptions, language: 'javascript' }, null, true);
+
+            setEditorLanguage(htmlMonaco, htmlLangSelect.value); setEditorLanguage(cssMonaco, cssLangSelect.value); setEditorLanguage(scriptMonaco, scriptLangSelect.value, true);
+            htmlLangSelect.addEventListener('change', (e) => { setEditorLanguage(htmlMonaco, e.target.value); debouncedUpdatePreview(); });
+            cssLangSelect.addEventListener('change', (e) => { setEditorLanguage(cssMonaco, e.target.value); debouncedUpdatePreview(); });
+            scriptLangSelect.addEventListener('change', (e) => { setEditorLanguage(scriptMonaco, e.target.value, true); debouncedUpdatePreview(); });
+
+            const codeWasLoaded = await loadSharedCodeFromURL();
+            if (!codeWasLoaded) {
+                htmlMonaco.setValue(defaultCodes[htmlLangSelect.value] || ''); cssMonaco.setValue(defaultCodes[cssLangSelect.value] || ''); scriptMonaco.setValue(defaultCodes[scriptLangSelect.value] || '');
+                setTimeout(() => { loadingIndicator.style.display = 'none'; }, 300);
+                debouncedUpdatePreview();
+            }
+
+            if (manageSnippetsButton) manageSnippetsButton.addEventListener('click', openSnippetModal);
+            if (closeSnippetModalButton) closeSnippetModalButton.addEventListener('click', closeSnippetModal);
+            if (createNewSnippetButton) createNewSnippetButton.addEventListener('click', () => showSnippetForm(null));
+            if (cancelSnippetEditButton) cancelSnippetEditButton.addEventListener('click', () => { snippetEditorFormContainer.style.display = 'none'; snippetForm.reset(); snippetIdInput.value = ''; });
+            if (snippetForm) snippetForm.addEventListener('submit', (e) => { e.preventDefault(); const snippetData = { id: snippetIdInput.value || null, language: snippetLanguageInput.value, trigger: snippetTriggerInput.value, template: snippetTemplateInput.value }; let success = snippetData.id ? SnippetManager.updateSnippet(snippetData.id, snippetData) : SnippetManager.addSnippet(snippetData); if (success) { renderUserSnippetsList(); snippetEditorFormContainer.style.display = 'none'; snippetForm.reset(); } });
+            if (exportSnippetsButton) exportSnippetsButton.addEventListener('click', () => SnippetManager.exportSnippets());
+            if (importSnippetsInput) importSnippetsInput.addEventListener('change', (event) => { const file = event.target.files[0]; if (file) SnippetManager.importSnippets(file); event.target.value = null; });
+            window.addEventListener('click', (event) => { if (event.target === snippetModal) closeSnippetModal(); });
+            if (shareButton) shareButton.addEventListener('click', handleShareButtonClick); else console.error("Share button element not found!");
+        });
+
+        // REVISED initializeMonacoEditor
+        function initializeMonacoEditor(containerId, baseOptions, staticPresetsGetter, isScriptEditor) {
+            const container = document.getElementById(containerId);
+            if (!container) { console.error(`Container ${containerId} not found!`); return null; }
+            const editor = monaco.editor.create(container, baseOptions);
+
+            editor.onDidChangeModelContent(e => {
+                if (e.isFlush || e.isUndoing || e.isRedoing || e.changes.length !== 1) {
+                    debouncedUpdatePreview(); 
+                    return;
+                }
+
+                const change = e.changes[0];
+                if (change.text.length === 1 && change.rangeLength === 0) { // Single char typed
+                    const model = editor.getModel();
+                    const currentPosition = { // Position *after* char was typed
+                        lineNumber: change.range.startLineNumber,
+                        column: change.range.startColumn + 1 
+                    };
+
+                    let langForPresets = baseOptions.language;
+                    if (isScriptEditor && scriptLangSelect) langForPresets = scriptLangSelect.value;
+                    else if (containerId === 'html-editor-container' && htmlLangSelect) langForPresets = htmlLangSelect.value;
+                    else if (containerId === 'css-editor-container' && cssLangSelect) langForPresets = cssLangSelect.value;
+
+                    let builtInLangPresets = {};
+                    if (staticPresetsGetter && !isScriptEditor) { builtInLangPresets = staticPresetsGetter; }
+                    else if (isScriptEditor || !staticPresetsGetter) { builtInLangPresets = codePresets[langForPresets] || {}; if (langForPresets === 'jsx' && Object.keys(builtInLangPresets).length === 0) builtInLangPresets = codePresets['typescript'] || {}; }
+                    
+                    const userLangSnippets = SnippetManager.getSnippetsByLanguage(langForPresets);
+                    let activePresets = { ...builtInLangPresets };
+                    userLangSnippets.forEach(s => { activePresets[s.trigger] = s.template; });
+
+                    if (Object.keys(activePresets).length === 0) {
+                        debouncedUpdatePreview();
+                        return;
+                    }
+
+                    const typedChar = change.text;
+                    const lineContentUpToTypedChar = model.getLineContent(currentPosition.lineNumber).substring(0, currentPosition.column);
+                    
+                    let snippetKeyToUse = null;
+                    let keywordLength = 0; 
+                    let replaceStartColumn; // This will be 0-indexed for internal calculation
+
+                    if (activePresets[typedChar] && lineContentUpToTypedChar === typedChar) {
+                        snippetKeyToUse = typedChar;
+                        keywordLength = 1; 
+                        replaceStartColumn = currentPosition.column - keywordLength; // 0-indexed start
+                    }
+                    else if (typedChar === ' ') {
+                        const textBeforeSpace = lineContentUpToTypedChar.substring(0, lineContentUpToTypedChar.length - 1);
+                        const lastWordMatch = textBeforeSpace.match(/(\S+)$/); 
+                        if (lastWordMatch) {
+                            const potentialKeyword = lastWordMatch[1];
+                            if (activePresets[potentialKeyword]) {
+                                snippetKeyToUse = potentialKeyword;
+                                keywordLength = potentialKeyword.length + 1; 
+                                replaceStartColumn = currentPosition.column - keywordLength; // 0-indexed start
+                            }
+                        }
+                    }
+
+                    if (snippetKeyToUse && activePresets[snippetKeyToUse]) {
+                        const snippetTemplate = activePresets[snippetKeyToUse];
+                        // Monaco Range columns are 1-based.
+                        const preciseRangeToReplace = new monaco.Range(
+                            currentPosition.lineNumber,         // startLineNumber
+                            replaceStartColumn + 1,             // startColumn (1-based)
+                            currentPosition.lineNumber,         // endLineNumber
+                            currentPosition.column              // endColumn (1-based, after typed char)
+                        );
+
+                        let snippetToInsert = snippetTemplate;
+                        let finalCursorPosRel = null; // {lineOffset, chOffset} relative to snippet start (0-indexed)
+                        const cursorPosMarker = "$CURSOR$";
+
+                        if (snippetTemplate.includes(cursorPosMarker)) {
+                            const markerIndex = snippetTemplate.indexOf(cursorPosMarker);
+                            snippetToInsert = snippetTemplate.replace(cursorPosMarker, "");
+                            const linesUpToMarker = snippetTemplate.substring(0, markerIndex).split('\n');
+                            finalCursorPosRel = {
+                                lineOffset: linesUpToMarker.length - 1,
+                                chOffset: linesUpToMarker[linesUpToMarker.length - 1].length
+                            };
+                        }
+                        
+                        const op = { range: preciseRangeToReplace, text: snippetToInsert, forceMoveMarkers: true };
+                        editor.executeEdits("snippet-expansion", [op]);
+
+                        if (finalCursorPosRel) {
+                            const finalLineNumber = preciseRangeToReplace.startLineNumber + finalCursorPosRel.lineOffset;
+                            // If snippet is multi-line and cursor is not on the first line, chOffset is from line start (0-indexed).
+                            // If on the first line, chOffset is relative to where snippet started (0-indexed).
+                            const finalColumn0Based = (finalCursorPosRel.lineOffset === 0 ? (preciseRangeToReplace.startColumn -1) : 0) + finalCursorPosRel.chOffset;
+                            editor.setPosition({ lineNumber: finalLineNumber, column: finalColumn0Based + 1 }); // Convert to 1-based for setPosition
+                            editor.revealPositionInCenterIfOutsideViewport({ lineNumber: finalLineNumber, column: finalColumn0Based + 1 });
+                        } else {
+                            const insertedLines = snippetToInsert.split('\n');
+                            let endLine, endColumn0Based; // 0-indexed
+                            if (insertedLines.length === 1) {
+                                endLine = preciseRangeToReplace.startLineNumber;
+                                endColumn0Based = (preciseRangeToReplace.startColumn - 1) + insertedLines[0].length;
+                            } else {
+                                endLine = preciseRangeToReplace.startLineNumber + insertedLines.length - 1;
+                                endColumn0Based = insertedLines[insertedLines.length - 1].length;
+                            }
+                            editor.setPosition({ lineNumber: endLine, column: endColumn0Based + 1}); // Convert to 1-based
+                            editor.revealPositionInCenterIfOutsideViewport({ lineNumber: endLine, column: endColumn0Based + 1});
+                        }
+                        debouncedUpdatePreview();
+                        return; 
+                    }
+                }
+                debouncedUpdatePreview();
+            });
+            return editor;
+        }
+
+        function setEditorLanguage(editorInstance, langKey, isScriptEditor = false) { if (!editorInstance) return; const monacoLang = getMonacoLangId(langKey); monaco.editor.setModelLanguage(editorInstance.getModel(), monacoLang); }
+
+        // Transpilation, Preview, Execution, CMD, Download, Clear (largely unchanged logic)
+        async function transpileHtml(rawHtml, lang) { if (lang === 'markdown' && typeof marked !== 'undefined') { try { return marked.parse(rawHtml); } catch (e) { appendCmdOutput(`MD Error: ${e.message}`, 'error'); return `<pre style="color:red">MD Error: ${e.message}</pre>${rawHtml}`; } } return rawHtml; }
+        async function transpileCss(rawCss, lang) { if (lang === 'scss' && sassInstance) { return new Promise(r => sassInstance.compile(rawCss, res => { if (res.status === 0) r(res.text); else {const eM=res.formatted||res.message||"SCSS err"; appendCmdOutput(`SCSS Error: ${eM}`,'error');r(`/* SCSS Err: ${eM.replace(/\n/g,' ').replace(/"/g,'\\\\"')} */\n${rawCss}`);}})); } return rawCss; }
+        async function transpileScript(rawScript, lang) { if (lang === 'typescript' && tsService) { try { return tsService.transpileModule(rawScript, { compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ESNext, jsx: ts.JsxEmit.React } }).outputText; } catch (e) { appendCmdOutput(`TS Error: ${e.message}`, 'error'); return `console.error("TS Error: ${e.message.replace(/"/g, '\\"').replace(/\n/g, '\\n')}");`; } } else if (lang === 'jsx' && typeof Babel !== 'undefined') { try { return Babel.transform(rawScript, { presets: ["react"], filename: "script.jsx" }).code; } catch (e) { appendCmdOutput(`JSX Error: ${e.message}`, 'error'); return `console.error("JSX Error: ${e.message.replace(/"/g, '\\"').replace(/\n/g, '\\n')}");`; } } return rawScript; }
+        const updatePreview = async () => { if (!htmlMonaco || !cssMonaco || !scriptMonaco) return; const rH = htmlMonaco.getValue(), rCss = cssMonaco.getValue(), rS = scriptMonaco.getValue(); const hL = htmlLangSelect.value, csL = cssLangSelect.value, sL = scriptLangSelect.value; consoleOutputPyElement.textContent=''; if(sL==='python'){ iframeContainer.style.display='none';outputConsoleContainer.style.display='flex'; if(pyodide){ consoleOutputPyElement.textContent="🐍 Running Py...\n"; try{ await runPythonCode(rS); consoleOutputPyElement.textContent+="\n✅ Py done.";} catch(e){ consoleOutputPyElement.textContent+=`\n❌ Py Err: ${e.name} - ${e.message}`;} } else { consoleOutputPyElement.textContent="Pyodide not ready.";} return; } iframeContainer.style.display='flex'; outputConsoleContainer.style.display='none'; let pH = await transpileHtml(rH,hL); let pCss = await transpileCss(rCss,csL); let pJS = await transpileScript(rS,sL); const scriptContentForPreview = `(async()=>{try{${pJS}}catch(e){console.error('Preview Error:',e);document.body.insertAdjacentHTML('afterbegin','<div style="color:red;background:pink;padding:5px;border:1px solid red;">JS Error: '+e.message+'</div>')}})()`; const outputDoc = previewFrame.contentDocument || previewFrame.contentWindow.document; try { outputDoc.open(); outputDoc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${pCss}</style></head><body>${pH}<script type="module">${scriptContentForPreview}<\/script></body></html>`); outputDoc.close(); } catch (e) { console.error("Preview write error:", e); appendCmdOutput("Preview update failed.", "error");} };
+        const debouncedUpdatePreview = debounce(updatePreview, 300);
+        async function runPythonCode(code){if(!pyodide)throw new Error("Pyodide not init.");pyodide.setStdout({batched:(msg)=>consoleOutputPyElement.textContent+=msg+"\n"});pyodide.setStderr({batched:(msg)=>consoleOutputPyElement.textContent+="Error: "+msg+"\n"});try{await pyodide.runPythonAsync(code);}finally{pyodide.setStdout({});pyodide.setStderr({});}}
+        cmdToggleButton.addEventListener('click', () => { const isVisible = cmdPanel.style.display === 'flex'; cmdPanel.style.display = isVisible ? 'none' : 'flex'; if (!isVisible) cmdInput.focus();});
+        cmdInput.addEventListener('keydown', async (e) => { if (e.key === 'Enter') { const commandLine = cmdInput.value.trim(); cmdInput.value = ''; if(commandLine==='')return; appendCmdOutput(`PS > ${commandLine}`); const [command, ...args] = commandLine.split(/\s+/); switch (command.toLowerCase()) { case 'help': appendCmdOutput("Commands: help, clear, echo, download, show_code, run_python, py_install, js_fetch_imports",'info'); appendCmdOutput("py_install <pkg> OR py_install -r <filename_for_prompt>", "info"); break; case 'clear': case 'cls': cmdOutput.innerHTML = '<div class="cmd-line cmd-info">Polyglot Studio CMD - Type \'help\'</div><div class="cmd-line"></div>'; break; case 'echo': appendCmdOutput(args.join(' ')); break; case 'download': await handleDownloadCommand(args[0]); break; case 'show_code': const ek=args[0]?.toLowerCase();if(ek==='html' && htmlMonaco)appendCmdOutput(htmlMonaco.getValue());else if(ek==='css' && cssMonaco)appendCmdOutput(cssMonaco.getValue());else if(ek==='script' && scriptMonaco)appendCmdOutput(scriptMonaco.getValue());else appendCmdOutput("Usage: show_code <html|css|script>",'error');break; case 'run_python': if(scriptLangSelect.value==='python' && scriptMonaco){appendCmdOutput("Exec Py...",'info');try{await runPythonCode(scriptMonaco.getValue());appendCmdOutput("Py exec done.",'success');}catch(err){appendCmdOutput(`Py CMD Err: ${err.message}`,'error');}}else{appendCmdOutput("Py not selected.",'error');}break; case 'py_install': if(pyodide&&args.length>0){let pkgsToInstall=[];let cmdFail=false;if(args[0].toLowerCase()==='-r'&&args.length>1){const reqFile=args[1];appendCmdOutput(`Simulating install from '${reqFile}'...`,'info');const reqContent=prompt(`Paste content of '${reqFile}':`);if(reqContent===null){appendCmdOutput("Install from reqs cancelled.",'warn');cmdFail=true;}else if(reqContent.trim()===""){appendCmdOutput("Reqs empty.",'warn');cmdFail=true;}else{pkgsToInstall=reqContent.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));if(pkgsToInstall.length===0){appendCmdOutput(`No valid pkgs in content for '${reqFile}'.`,'warn');cmdFail=true;}}}else if(args[0].toLowerCase()==='-r'){appendCmdOutput("Usage: py_install -r <filename>",'error');cmdFail=true;}else{pkgsToInstall=[args[0].trim()];if(!pkgsToInstall[0]){appendCmdOutput("Pkg name empty.",'error');cmdFail=true;}}if(!cmdFail&&pkgsToInstall.length>0){appendCmdOutput(`Installing: ${pkgsToInstall.join(', ')}...`,'info');loadingIndicator.style.display='flex';loadingDetails.textContent=`Installing ${pkgsToInstall.length} pkg(s)...`;(async()=>{try{const pkgListStr=JSON.stringify(pkgsToInstall);const pyInstallScript=`import micropip\nimport json\npkgs_json='''${pkgListStr}'''\npkgs=json.loads(pkgs_json)\nprint(f"Micropip: {', '.join(pkgs) if pkgs else 'None'}")\nfor pkg_name in pkgs:\n  if not pkg_name:continue\n  try:\n    print(f"Micropip: Installing {pkg_name}...")\n    await micropip.install(pkg_name)\n    print(f"Micropip: {pkg_name} installed.")\n  except Exception as e:\n    print(f"Micropip Error for {pkg_name}: {e}")\nprint("Micropip: All attempted.")`;await pyodide.runPythonAsync(pyInstallScript);appendCmdOutput(`Pkg install for: ${pkgsToInstall.join(', ')} initiated.`, 'success');}catch(err){appendCmdOutput(`Micropip cmd error: ${err.message}`,'error');}finally{loadingIndicator.style.display='none';}})();}}else if(!pyodide){appendCmdOutput("Pyodide not ready.",'error');}else{appendCmdOutput("Usage: py_install <pkg> OR py_install -r <filename>",'error');}break; case 'js_fetch_imports': handleJsFetchImports(); break; default: appendCmdOutput(`'${command}' not recognized. Type 'help'.`,'error'); if(['npm','pip','node'].includes(command.toLowerCase())){appendCmdOutput(`Note: System commands like '${command}' not supported.`, 'warn');appendCmdOutput(`Try 'py_install <pkg>' or 'js_fetch_imports'.`,'warn');} } if(cmdOutput.textContent.length > 7000) cmdOutput.textContent = cmdOutput.textContent.slice(-7000); appendCmdOutput(""); }});
+        function handleJsFetchImports(){ const sL=scriptLangSelect.value;if(!['javascript','typescript','jsx'].includes(sL)){appendCmdOutput("`js_fetch_imports` for JS/TS/JSX.",'error');return;}if(!scriptMonaco){appendCmdOutput("Script editor not ready.", "error"); return;} const code=scriptMonaco.getValue();const importRegex=/import\s+.*?from\s+['"]([^'"]+)['"]/g;let match;const imports=new Set();while((match=importRegex.exec(code))!==null){imports.add(match[1]);}if(imports.size===0){appendCmdOutput("No imports found.",'info');return;}appendCmdOutput("Potential imports (experimental):",'info');imports.forEach(pkg=>{if(pkg.startsWith('.')||pkg.startsWith('/')){appendCmdOutput(`  - Local: ${pkg}`,'warn');}else{appendCmdOutput(`  ${pkg}:`);appendCmdOutput(`    esm.sh: https://esm.sh/${pkg}`);appendCmdOutput(`    unpkg:  https://unpkg.com/${pkg}`);}});appendCmdOutput("Note: These are suggestions.",'warn');}
+        async function handleDownloadCommand(type){ if (!htmlMonaco || !cssMonaco || !scriptMonaco) { appendCmdOutput("Editors not ready.", "error"); return; } const dT=type?.toLowerCase();const rH=htmlMonaco.getValue(),rC=cssMonaco.getValue(),rS=scriptMonaco.getValue();const hL=htmlLangSelect.value,cL=cssLangSelect.value,sL=scriptLangSelect.value;appendCmdOutput(`Download: ${dT||'smart_default'}...`,'info');if(dT==='html_src'){triggerDownload(new Blob([rH],{type:'text/plain'}),hL==='markdown'?'source.md':'source.html');appendCmdOutput("DL HTML src.",'success');}else if(dT==='css_src'){triggerDownload(new Blob([rC],{type:'text/plain'}),cL==='scss'?'source.scss':'source.css');appendCmdOutput("DL CSS src.",'success');}else if(dT==='script_src'){let ext='.js';if(sL==='typescript')ext='.ts';else if(sL==='jsx')ext='.jsx';else if(sL==='python')ext='.py';triggerDownload(new Blob([rS],{type:'text/plain'}),`script${ext}`);appendCmdOutput("DL Script src.",'success');}else if(dT==='single_html'){if(hL==='html'&&cL==='css'&&['javascript','typescript','jsx'].includes(sL)){let fH=rH,fC=await transpileCss(rC,cL),fJ=await transpileScript(rS,sL);let doc=codePresets.html['!'].replace("$CURSOR$","");const bodyContentMatch=fH.match(/<body[^>]*>([\s\S]*?)<\/body>/i); if(bodyContentMatch&&bodyContentMatch[1]){doc=doc.replace(/<body>([\s\S]*?)<\/body>/i,`<body ${fH.match(/<body([^>]*)>/i)?.[1]||''}>${bodyContentMatch[1]}</body>`);}else{doc=doc.replace(/<body>([\s\S]*?)<\/body>/i,`<body>${fH}</body>`);}doc=doc.replace('</head>',`<style>\n${fC}\n</style>\n</head>`);doc=doc.replace('</body>',`<script type="module">(async()=>{${fJ}})()<\/script></body>`);triggerDownload(new Blob([doc],{type:'text/html'}),'index_combined.html');appendCmdOutput("DL combined HTML.",'success');}else{appendCmdOutput("single_html for HTML/CSS/JS(TS/JSX).",'error');}}else if(dT==='project_zip'){if(typeof JSZip==='undefined'){appendCmdOutput("JSZip not loaded.",'error');return;}const zip=new JSZip();let sF="script.js";if(sL==='typescript')sF="script.ts";else if(sL==='jsx')sF="script.jsx";else if(sL==='python')sF="script.py";zip.file(hL==='markdown'?"source.md":"index.html",rH);zip.file(cL==='scss'?"style.scss":"style.css",rC);zip.file(sF,rS);let runH=await transpileHtml(rH,hL),runC=await transpileCss(rC,cL);const idxHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><link rel="stylesheet" href="${cL==='scss'?'style.css':'style.css'}"><title>Project</title></head><body>${runH}<script src="${sF}" ${sL !== 'python' ? 'type="module" defer' : 'defer'}><\/script></body></html>`;zip.file("index.html",idxHTML); if(cL==='scss') zip.file("style.css", runC); zip.generateAsync({type:"blob"}).then(b=>triggerDownload(b,"project.zip"));appendCmdOutput("Generated project.zip.",'success');}else{appendCmdOutput(`Unknown download type: '${type}'.`,'error');}}
+        document.getElementById('clear-button').addEventListener('click',()=>{ if (!htmlMonaco || !cssMonaco || !scriptMonaco) return; if(confirm("Clear all editors?")){ htmlMonaco.setValue(defaultCodes[htmlLangSelect.value] || ''); cssMonaco.setValue(defaultCodes[cssLangSelect.value] || ''); scriptMonaco.setValue(defaultCodes[scriptLangSelect.value] || ''); }});
+        document.getElementById('download-button').addEventListener('click',async()=>{ if (!htmlMonaco || !cssMonaco || !scriptMonaco) { appendCmdOutput("Editors not ready.", "error"); return; } const hL=htmlLangSelect.value,cL=cssLangSelect.value,sL=scriptLangSelect.value; if(sL==='python'){await handleDownloadCommand('script_src');} else if(hL==='html'&&cL==='css'&&['javascript','typescript','jsx'].includes(sL)){await handleDownloadCommand('single_html');} else{await handleDownloadCommand('project_zip');}});
+
+    </script>
+</body>
+</html>
